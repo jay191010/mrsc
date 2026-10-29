@@ -302,7 +302,7 @@ struct OnboardingView: View {
     private var spinGesture: some Gesture {
         DragGesture(minimumDistance: 0, coordinateSpace: .global)
             .onChanged { v in
-                let a = atan2(v.location.y - recordCenter.y, v.location.x - recordCenter.x) * 180 / .pi
+                let a = Double(atan2(v.location.y - recordCenter.y, v.location.x - recordCenter.x) * 180 / .pi)
                 let now = Date()
                 if grab == nil {
                     grab = (a, spin.angle(at: now), 0)

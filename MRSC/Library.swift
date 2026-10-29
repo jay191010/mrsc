@@ -234,20 +234,23 @@ final class LibraryStore {
     }
 
     private func buildEntries() {
-        let byAlbum = Dictionary(grouping: tracks) { "\($0.artist)|\($0.album)" }
-        let albums = byAlbum.map { key, list in
-            let sorted = list.sorted { ($0.trackNumber, $0.title) < ($1.trackNumber, $1.title) }
+        let byAlbum: [String: [Track]] = Dictionary(grouping: tracks) { "\($0.artist)|\($0.album)" }
+        let albums: [LibraryEntry] = byAlbum.map { key, list in
+            let sorted: [Track] = list.sorted { ($0.trackNumber, $0.title) < ($1.trackNumber, $1.title) }
             return LibraryEntry(kind: .album, key: key, title: sorted[0].album,
                                 subtitle: "\(sorted[0].artist) • \(songCount(sorted.count))", tracks: sorted)
         }.sorted { $0.title.localizedStandardCompare($1.title) == .orderedAscending }
 
-        let byArtist = Dictionary(grouping: tracks) { $0.artist }
+        let byArtist: [String: [Track]] = Dictionary(grouping: tracks) { $0.artist }
         _albums = albums
-        let latest = Dictionary(albums.map { ($0.key, $0.tracks.map(\.addedAt).max() ?? .distantPast) }, uniquingKeysWith: { a, _ in a })
+        let latest: [String: Date] = Dictionary(
+            albums.map { ($0.key, $0.tracks.map(\.addedAt).max() ?? .distantPast) },
+            uniquingKeysWith: { a, _ in a }
+        )
         _albumsByRecent = albums.sorted { (latest[$0.key] ?? .distantPast) > (latest[$1.key] ?? .distantPast) }
 
-        _artists = byArtist.map { name, list in
-            let sorted = list.sorted { $0.album == $1.album ? ($0.trackNumber, $0.title) < ($1.trackNumber, $1.title) : $0.album < $1.album }
+        _artists = byArtist.map { (name: String, list: [Track]) in
+            let sorted: [Track] = list.sorted { $0.album == $1.album ? ($0.trackNumber, $0.title) < ($1.trackNumber, $1.title) : $0.album < $1.album }
             return LibraryEntry(kind: .artist, key: name, title: name,
                                 subtitle: "\(songCount(sorted.count)) • \(formatDuration(sorted.reduce(0) { $0 + $1.duration }))",
                                 tracks: sorted)

@@ -207,7 +207,7 @@ nonisolated enum CoverPainter {
             var layer = ctx
             layer.translateBy(x: w / 2, y: h / 2)
             layer.rotate(by: .degrees(rng.range(-42, -12)))
-            let sw = w * rng.range(0.14, 0.22)
+            let sw = w * CGFloat(rng.range(0.14, 0.22))
             for i in -9..<9 {
                 layer.fill(Path(CGRect(x: CGFloat(i) * sw, y: -h * 1.5, width: sw, height: h * 3)),
                            with: .color(cols[(i + 20) % cols.count].opacity(i % 2 == 0 ? 0.85 : 0.35)))

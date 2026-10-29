@@ -71,7 +71,9 @@ nonisolated enum SongListMatcher {
         let wa = Set(a.split(separator: " ")), wb = Set(b.split(separator: " "))
         let overlap = Double(wa.intersection(wb).count) / Double(max(1, max(wa.count, wb.count)))
         let contains = (a.contains(b) || b.contains(a)) ? 0.9 : 0
-        return max(lev, overlap * 0.95, contains * min(1, Double(min(a.count, b.count)) / Double(max(a.count, b.count)) + 0.3))
+        let lengthRatio = Double(min(a.count, b.count)) / Double(max(a.count, b.count))
+        let containsScore = contains * min(1, lengthRatio + 0.3)
+        return max(lev, max(overlap * 0.95, containsScore))
     }
 
     private static func grams(_ s: String) -> Set<String> {

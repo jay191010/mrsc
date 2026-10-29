@@ -243,7 +243,13 @@ struct NowPlayingView: View {
             let centered = !compact && cfg.titleAlignment == .center
             let buttons = (cfg.showStar ? 1 : 0) + (cfg.showTitleMenu ? 1 : 0)
             // A centred title sits in the middle of the whole row; long ones use the room up to the buttons, then scroll.
-            let shift = buttons == 0 ? 0 : CGFloat(buttons * 42 + (buttons - 1) * 12 + 12) / 2
+            let shift: CGFloat
+            if buttons == 0 {
+                shift = 0
+            } else {
+                let points = buttons * 42 + (buttons - 1) * 12 + 12
+                shift = CGFloat(points) / 2
+            }
             // Each line swaps on its own, overlapping in place, the artist a beat after the title.
             VStack(alignment: centered ? .center : .leading, spacing: 2) {
                 ZStack {
