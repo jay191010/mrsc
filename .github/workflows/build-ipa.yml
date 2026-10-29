@@ -1,0 +1,118 @@
+name: Build IPA
+
+# Builds MRSC for a real iOS device on a GitHub-hosted macOS runner.
+#
+# The default artifact is an UNSIGNED IPA. It is not directly installable on a
+# stock iPhone, but every common sideload tool re-signs it for you:
+#   - Sideloadly (https://sideloadly.io)
+#   - AltStore / SideServer (https://altstore.io)
+# Both can use a free Apple ID (apps then expire after 7 days and must be re-signed).
+#
+# For a TestFlight / App Store build (which needs a paid Apple Developer account
+# and code signing), see docs/TESTFLIGHT.md and build on a Mac, or add the
+# optional signing steps described at the bottom of this file.
+
+on:
+  push:
+    tags:
+      - "v*"          # pushing a tag like v1.0 also creates a GitHub Release
+  workflow_dispatch:   # lets you run it manually from the Actions tab
+
+permissions:
+  contents: write      # required to create a GitHub Release on tags
+
+jobs:
+  ipa:
+    name: Build unsigned IPA
+    runs-on: macos-26
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Select Xcode 26
+        run: |
+          set -e
+          XCODE_APP="$(ls -d /Applications/Xcode_26*.app 2>/dev/null | sort -V | tail -n 1 || true)"
+          if [ -z "$XCODE_APP" ]; then
+            XCODE_APP="$(ls -d /Applications/Xcode*.app 2>/dev/null | sort -V | tail -n 1)"
+          fi
+          echo "Using $XCODE_APP"
+          sudo xcode-select -s "$XCODE_APP/Contents/Developer"
+          xcodebuild -version
+          swift --version
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      - name: Generate Xcode project
+        run: xcodegen generate
+
+      - name: Archive (unsigned, device build)
+        run: |
+          set -eo pipefail
+          xcodebuild \
+            -project MRSC.xcodeproj \
+            -scheme MRSC \
+            -configuration Release \
+            -destination 'generic/platform=iOS' \
+            -archivePath build/MRSC.xcarchive \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY="" \
+            archive
+
+      - name: Package IPA
+        run: |
+          set -eo pipefail
+          APP_PATH="$(find build/MRSC.xcarchive/Products/Applications -maxdepth 1 -name '*.app' | head -n 1)"
+          test -n "$APP_PATH"
+          VERSION="$(grep -E 'MARKETING_VERSION' project.yml | head -n 1 | sed -E 's/.*"([^"]+)".*/\1/')"
+          IPA_NAME="MRSC-${VERSION}-unsigned.ipa"
+          rm -rf Payload && mkdir Payload
+          cp -R "$APP_PATH" Payload/
+          rm -f "$IPA_NAME"
+          zip -qr "$IPA_NAME" Payload
+          echo "IPA_NAME=$IPA_NAME" >> "$GITHUB_ENV"
+          ls -lh "$IPA_NAME"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: mrsc-ipa
+          path: ${{ env.IPA_NAME }}
+          retention-days: 30
+
+      - name: Create GitHub Release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: ${{ env.IPA_NAME }}
+          generate_release_notes: true
+
+# ---------------------------------------------------------------------------
+# OPTIONAL: signed, device-installable / App Store IPA
+#
+# A signed build needs a paid Apple Developer account. Add these repository
+# secrets (Settings -> Secrets and variables -> Actions), then replace the
+# "Archive" step above with a signed archive + export:
+#
+#   BUILD_CERTIFICATE_BASE64  base64 of the Apple Distribution .p12
+#   P12_PASSWORD              password for that .p12
+#   PROVISIONING_PROFILE_BASE64 (optional) base64 of a .mobileprovision
+#   KEYCHAIN_PASSWORD         any temporary password for a CI keychain
+#
+# Then use:
+#   - uses: apple-actions/import-codesign-certs@v3
+#     with:
+#       p12-file-base64:        ${{ secrets.BUILD_CERTIFICATE_BASE64 }}
+#       p12-password:          ${{ secrets.P12_PASSWORD }}
+#   - run: |
+#       xcodebuild -project MRSC.xcodeproj -scheme MRSC -configuration Release \
+#         -destination 'generic/platform=iOS' -archivePath build/MRSC.xcarchive \
+#         -allowProvisioningUpdates archive
+#       xcodebuild -exportArchive -archivePath build/MRSC.xcarchive \
+#         -exportPath build/ipa -exportOptionsPlist ExportOptions.plist
+# with ExportOptions.plist method = app-store (or ad-hoc / development).
+# ---------------------------------------------------------------------------
