@@ -261,14 +261,13 @@ final class ModuleStore {
 
     // MARK: Repositories (8SPINE "module-source.json")
 
-    @discardableResult
-    func addRepo(_ url: URL) async throws -> ModuleRepo {
-        let src = Self.rawURL(url)
-        let (data, _) = try await URLSession.shared.data(from: src)
-        guard let obj = try? JSONSerialization.jsonObject(with: data) else { throw ModuleError.invalid("the repository isn't JSON") }
+    /// Parse an 8SPINE "module-source.json" into Sendable entries. Kept nonisolated so the
+    /// non-Sendable `Any` values from JSONSerialization never cross into MainActor state.
+    nonisolated static func parseRepo(data: Data, base: URL) throws -> [ModuleRepo.Entry] {
+        guard let obj = try? JSONSerialization.jsonObject(with: data) else {
+            throw ModuleError.invalid("the repository isn't JSON")
+        }
         var entries: [ModuleRepo.Entry] = []
-        let base = src.deletingLastPathComponent()
-        @MainActor
         func take(_ list: [[String: Any]]) {
             for e in list {
                 let file = (e["download"] as? String) ?? (e["file"] as? String) ?? (e["url"] as? String)
@@ -283,9 +282,21 @@ final class ModuleStore {
             }
         }
         if let dict = obj as? [String: Any] {
-            for (_, v) in dict.sorted(by: { $0.key < $1.key }) { if let list = v as? [[String: Any]] { take(list) } }
+            for (_, v) in dict.sorted(by: { $0.key < $1.key }) {
+                if let list = v as? [[String: Any]] { take(list) }
+            }
             if let list = dict["modules"] as? [[String: Any]] { take(list) }
-        } else if let list = obj as? [[String: Any]] { take(list) }
+        } else if let list = obj as? [[String: Any]] {
+            take(list)
+        }
+        return entries
+    }
+
+    @discardableResult
+    func addRepo(_ url: URL) async throws -> ModuleRepo {
+        let src = Self.rawURL(url)
+        let (data, _) = try await URLSession.shared.data(from: src)
+        var entries = try Self.parseRepo(data: data, base: src.deletingLastPathComponent())
         guard !entries.isEmpty else { throw ModuleError.invalid("no extensions found in that repository") }
         // Peek at each file so locked 8SPINE-only modules are marked instead of failing on install.
         for i in entries.indices {
