@@ -268,6 +268,7 @@ final class ModuleStore {
         guard let obj = try? JSONSerialization.jsonObject(with: data) else { throw ModuleError.invalid("the repository isn't JSON") }
         var entries: [ModuleRepo.Entry] = []
         let base = src.deletingLastPathComponent()
+        @MainActor
         func take(_ list: [[String: Any]]) {
             for e in list {
                 let file = (e["download"] as? String) ?? (e["file"] as? String) ?? (e["url"] as? String)
